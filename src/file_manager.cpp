@@ -66,8 +66,8 @@ bool FileManager::Save(const GameRecord& record, const std::string& path) {
       << (meta.winner.has_value() ? PlayerToString(*meta.winner) : "draw")
       << "\n";
   out << "undo_enabled = " << (meta.undo_enabled ? "true" : "false") << "\n";
-  out << "time_limit_enabled = "
-      << (meta.time_limit_enabled ? "true" : "false") << "\n";
+  out << "time_limit_enabled = " << (meta.time_limit_enabled ? "true" : "false")
+      << "\n";
   out << "time_limit_seconds = " << meta.time_limit_seconds << "\n";
 
   out << "\n[moves]\n";

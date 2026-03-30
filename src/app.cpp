@@ -110,8 +110,8 @@ App::State App::RunReplay() {
   // Trim whitespace.
   while (!path.empty() && (path.front() == ' ' || path.front() == '\t'))
     path.erase(path.begin());
-  while (!path.empty() && (path.back() == ' ' || path.back() == '\t' ||
-                            path.back() == '\r'))
+  while (!path.empty() &&
+         (path.back() == ' ' || path.back() == '\t' || path.back() == '\r'))
     path.pop_back();
 
   ReplayController rc;
@@ -194,8 +194,8 @@ void App::PromptSaveGame(const GameRecord& record) {
   // Trim.
   while (!path.empty() && (path.front() == ' ' || path.front() == '\t'))
     path.erase(path.begin());
-  while (!path.empty() && (path.back() == ' ' || path.back() == '\t' ||
-                            path.back() == '\r'))
+  while (!path.empty() &&
+         (path.back() == ' ' || path.back() == '\t' || path.back() == '\r'))
     path.pop_back();
 
   if (path.empty()) path = default_name.str();

@@ -7,8 +7,8 @@
 #include "move_record.h"
 
 struct GameMetadata {
-  std::string date;           // ISO-8601, e.g. "2026-03-31"
-  int duration_sec = 0;       // wall-clock seconds for the full game
+  std::string date;      // ISO-8601, e.g. "2026-03-31"
+  int duration_sec = 0;  // wall-clock seconds for the full game
   int total_moves = 0;
   std::optional<Player> winner;  // nullopt means draw
   bool undo_enabled = false;

@@ -17,9 +17,7 @@ void PrintSeparator(int width = 60) {
 // Board rendering
 // ---------------------------------------------------------------------------
 
-char Grid::PlayerChar(Player p) {
-  return (p == Player::kBlack) ? 'X' : 'O';
-}
+char Grid::PlayerChar(Player p) { return (p == Player::kBlack) ? 'X' : 'O'; }
 
 void Grid::DrawBoard(const Board& board) const {
   // Column header: A through O.

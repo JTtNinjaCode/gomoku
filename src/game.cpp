@@ -30,7 +30,8 @@ bool Game::ParseInput(const std::string& input, int* row, int* col) const {
 
   // Format 1: letter + number, e.g. "H8" or "h8".
   if (std::isalpha(static_cast<unsigned char>(s[0]))) {
-    char letter = static_cast<char>(std::toupper(static_cast<unsigned char>(s[0])));
+    char letter =
+        static_cast<char>(std::toupper(static_cast<unsigned char>(s[0])));
     if (letter < 'A' || letter > 'O') return false;
     std::string num_str = s.substr(1);
     // Trim spaces between letter and number.
@@ -40,8 +41,8 @@ bool Game::ParseInput(const std::string& input, int* row, int* col) const {
     try {
       int r = std::stoi(num_str);
       if (r < 1 || r > Board::kSize) return false;
-      *col = letter - 'A';       // 0-indexed
-      *row = r - 1;              // 0-indexed
+      *col = letter - 'A';  // 0-indexed
+      *row = r - 1;         // 0-indexed
     } catch (...) {
       return false;
     }
@@ -65,8 +66,8 @@ bool Game::ParseInput(const std::string& input, int* row, int* col) const {
 int Game::ComputeSecondsRemaining() const {
   if (!config_.time_limit_enabled()) return -1;
   auto elapsed = std::chrono::steady_clock::now() - turn_start_;
-  int elapsed_sec =
-      static_cast<int>(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count());
+  int elapsed_sec = static_cast<int>(
+      std::chrono::duration_cast<std::chrono::seconds>(elapsed).count());
   int remaining = config_.time_limit_seconds() - elapsed_sec;
   return (remaining > 0) ? remaining : 0;
 }

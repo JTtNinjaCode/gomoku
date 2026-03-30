@@ -19,8 +19,8 @@ Configuration::Configuration() {
     auto trim = [](std::string& s) {
       while (!s.empty() && (s.front() == ' ' || s.front() == '\t'))
         s.erase(s.begin());
-      while (!s.empty() && (s.back() == ' ' || s.back() == '\t' ||
-                            s.back() == '\r'))
+      while (!s.empty() &&
+             (s.back() == ' ' || s.back() == '\t' || s.back() == '\r'))
         s.pop_back();
     };
     trim(key);
