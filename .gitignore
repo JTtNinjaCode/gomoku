@@ -1,0 +1,4 @@
+build/
+*.gom
+gomoku.cfg
+compile_commands.json
