@@ -1,58 +1,79 @@
 # Gomoku
 
-A command-line Gomoku (Five in a Row) game written in C++17.
+A two-player Gomoku (Five in a Row) game written in C++17 with a Dear ImGui GUI.
 
-## Rules
+- Mouse-click to place stones on a 15×15 board
+- Real-time per-move countdown timer
+- Black and white stone rendering on a wood-coloured board
+- Game save / load (`.gom` format) and step-through replay
 
-- 15×15 board; stones are placed on intersections.
-- Black (`X`) moves first, then White (`O`), alternating.
-- First player to form five or more consecutive stones in a row, column, or
-  diagonal wins.
+## Requirements
 
-## Build
+| Dependency | Notes |
+|---|---|
+| CMake ≥ 3.16 | Build system |
+| C++17 compiler | GCC 9+, Clang 10+, or MSVC 2019+ |
+| OpenGL | Usually pre-installed on Linux/macOS/Windows |
+| libGL / X11 / Wayland dev headers | Linux only (see below) |
 
+### Linux — install system packages
+
+**Ubuntu / Debian:**
 ```bash
-cmake -B build
-cmake --build build
+sudo apt install cmake build-essential libgl1-mesa-dev \
+     libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+     libwayland-dev libxkbcommon-dev
 ```
 
-The binary is placed at `build/gomoku`.
+**Arch / Manjaro:**
+```bash
+sudo pacman -S cmake base-devel mesa libx11 libxrandr libxinerama \
+     libxcursor libxi wayland libxkbcommon
+```
 
-## Usage
+## Clone & Build
+
+```bash
+# 1. Clone with submodules (imgui + glfw live under third_party/)
+git clone --recurse-submodules git@github.com:JTtNinjaCode/gomoku.git
+cd gomoku
+
+# 2. Configure
+cmake -B build
+
+# 3. Compile
+cmake --build build -j$(nproc)   # Linux / macOS
+cmake --build build              # Windows
+```
+
+The binary is placed at `build/gomoku` (or `build\gomoku.exe` on Windows).
+
+> **Already cloned without `--recurse-submodules`?**
+> ```bash
+> git submodule update --init --recursive
+> ```
+
+## Run
 
 ```bash
 ./build/gomoku
 ```
 
-Use the main menu to choose a mode:
+## How to Play
 
-| Key | Mode |
-|-----|------|
-| 1   | Single Player vs AI *(not yet implemented)* |
-| 2   | Local Two Player |
-| 3   | Network Multiplayer *(not yet implemented)* |
-| 4   | Replay |
-| 5   | Settings |
-| 0   | Quit |
+Use the main menu to choose a mode. Everything is mouse-driven:
 
-### Local Two Player
+- **Local Two Player** — click an intersection on the board to place your stone. Black moves first.
+- **Replay** — enter a path to a `.gom` file, then use **Prev / Next** (or ← → arrow keys) to step through moves.
+- **Settings** — toggle undo and configure the per-move time limit. Changes are saved to `gomoku.cfg`.
 
-Enter coordinates to place a stone. Accepted formats:
+### Timer
 
-- `H8` — column letter (A–O) followed by row number (1–15)
-- `8 8` — row then column, both 1-indexed
+When a per-move time limit is enabled, the countdown is shown in the top bar. If a player's time runs out the opponent wins automatically — no input required.
 
-Type `undo` to take back the last move (must be enabled in Settings).
+### Undo
 
-### Replay
-
-Enter the path to a `.gom` file. Use `n` / `p` to step forward / backward,
-and `q` to return to the main menu.
-
-### Settings
-
-Toggle the undo feature and the per-move time limit. Settings are persisted
-to `gomoku.cfg` in the working directory.
+If undo is enabled in Settings, an **Undo** button appears during play and takes back the last two half-moves so the same player moves again.
 
 ## Save Format (`.gom`)
 
@@ -77,13 +98,8 @@ time_limit_seconds = 60
 2      white   7    8
 ```
 
-- `row` and `col` are 0-indexed integers.
-- `winner` is `black`, `white`, or `draw`.
+`row` and `col` are 0-indexed integers. `winner` is `black`, `white`, or `draw`.
 
-## Code Style
+## License
 
-Google C++ style enforced via `clang-format`:
-
-```bash
-clang-format --dry-run --Werror src/*.cpp include/*.h
-```
+MIT — see [LICENSE](LICENSE).
