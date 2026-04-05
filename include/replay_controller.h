@@ -4,21 +4,21 @@
 
 #include "board.h"
 #include "game_record.h"
-#include "grid.h"
 
-// Loads a .gom file and provides interactive step-through replay.
+// Loads a .gom file and reconstructs board states for interactive replay.
+// Navigation (cursor, prev/next) is managed by the caller (App).
 class ReplayController {
  public:
   // Loads the .gom file at path. Returns false on failure.
   bool Load(const std::string& path);
 
-  // Runs the interactive replay loop.
-  // Controls: n = next, p = previous, q = quit.
-  void Run(const Grid& grid) const;
-
- private:
-  // Reconstructs a Board by replaying moves[0..step-1].
+  // Returns a Board reconstructed by replaying moves[0..step-1].
+  // step=0 → empty board, step=total_moves → final position.
   Board BoardAtStep(int step) const;
 
+  int total_moves() const { return record_.size(); }
+  const GameRecord& record() const { return record_; }
+
+ private:
   GameRecord record_;
 };

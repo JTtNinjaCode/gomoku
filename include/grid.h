@@ -1,35 +1,34 @@
 #pragma once
 
-#include "board.h"
-#include "configuration.h"
-#include "game_record.h"
-#include "info_panel.h"
-#include "move_record.h"
+#include <utility>
 
-// MVC view layer. Reads Board and InfoPanel; writes to stdout.
-// Never mutates any game state.
+#include "board.h"
+
+// ImGui-based board renderer.
+// All public methods must be called from within an active ImGui window.
 class Grid {
  public:
-  // Clears the terminal and redraws the board and info bar.
-  void Render(const Board& board, const InfoPanel& panel) const;
+  // Draws the 15x15 gomoku board at the current ImGui cursor position.
+  // Stones are drawn as filled circles (black or white).
+  // A semi-transparent hover preview is shown when the cell is empty.
+  // last_row/last_col: 0-indexed position of the most recently placed stone
+  // (pass -1 to disable the indicator).
+  //
+  // Returns the (row, col) of the intersection clicked this frame,
+  // or {-1, -1} if no click occurred.
+  static std::pair<int, int> DrawBoard(const Board& board,
+                                       int last_row = -1, int last_col = -1);
 
-  // Displays the win banner.
-  void RenderWin(std::optional<Player> winner) const;
+  // Same as DrawBoard but read-only (no hover preview, no click detection).
+  static void DrawBoardReadOnly(const Board& board,
+                                int last_row = -1, int last_col = -1);
 
-  // Displays the main menu.
-  void RenderMainMenu() const;
+  // Board geometry constants (pixels).
+  static constexpr float kCellSize = 40.0f;
+  static constexpr float kStoneRadius = 17.0f;
+  static constexpr float kBoardPadding = 28.0f;
 
-  // Displays the settings screen with the current configuration.
-  void RenderSettings(const Configuration& config) const;
-
-  // Displays the board in replay mode with step counter.
-  void RenderReplayFrame(const Board& board, int step, int total,
-                         const GameMetadata& meta) const;
-
- private:
-  void DrawBoard(const Board& board) const;
-  void DrawInfoBar(const InfoPanel& panel) const;
-
-  // Returns 'X' for Black, 'O' for White.
-  static char PlayerChar(Player p);
+  // Total canvas size for one axis: 14 gaps + 2 padding.
+  static constexpr float kCanvasSize =
+      kBoardPadding * 2.0f + (Board::kSize - 1) * kCellSize;
 };

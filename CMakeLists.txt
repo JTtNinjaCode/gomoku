@@ -5,8 +5,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+add_subdirectory(third_party)
+
+find_package(OpenGL REQUIRED)
+
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
 add_executable(gomoku ${SOURCES})
 target_include_directories(gomoku PRIVATE include)
 target_compile_options(gomoku PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(gomoku PRIVATE imgui glfw OpenGL::GL)

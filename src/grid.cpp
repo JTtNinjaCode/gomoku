@@ -1,141 +1,145 @@
 #include "grid.h"
 
-#include <iostream>
-#include <string>
+#include "imgui.h"
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
 
 namespace {
 
-void ClearScreen() { std::cout << "\033[2J\033[H"; }
+// Board background colour (warm wood tone).
+constexpr ImU32 kBoardBg = IM_COL32(205, 160, 80, 255);
+// Grid line colour.
+constexpr ImU32 kLineColor = IM_COL32(60, 40, 10, 200);
+// Star-point dot colour.
+constexpr ImU32 kStarColor = IM_COL32(60, 40, 10, 255);
+// Last-move indicator.
+constexpr ImU32 kLastMoveDot = IM_COL32(220, 50, 50, 230);
 
-void PrintSeparator(int width = 60) {
-  std::cout << std::string(width, '-') << "\n";
+// Star-point positions (0-indexed) for a standard 15×15 board.
+constexpr int kStarPoints[][2] = {
+    {2, 2},  {2, 7},  {2, 12},
+    {7, 2},  {7, 7},  {7, 12},
+    {12, 2}, {12, 7}, {12, 12},
+};
+
+// Screen position of (row, col) intersection relative to the board origin.
+ImVec2 IntersectionPos(ImVec2 origin, int row, int col) {
+  return {origin.x + Grid::kBoardPadding + col * Grid::kCellSize,
+          origin.y + Grid::kBoardPadding + row * Grid::kCellSize};
+}
+
+void DrawStone(ImDrawList* dl, ImVec2 center, Cell cell) {
+  if (cell == Cell::kBlack) {
+    // Black stone: dark fill + subtle highlight ring.
+    dl->AddCircleFilled(center, Grid::kStoneRadius,
+                        IM_COL32(20, 20, 20, 255), 40);
+    dl->AddCircle(center, Grid::kStoneRadius,
+                  IM_COL32(90, 90, 90, 160), 40, 1.2f);
+  } else {
+    // White stone: ivory fill + thin dark outline + inner shadow.
+    dl->AddCircleFilled(center, Grid::kStoneRadius,
+                        IM_COL32(245, 243, 228, 255), 40);
+    dl->AddCircle(center, Grid::kStoneRadius,
+                  IM_COL32(30, 30, 30, 220), 40, 1.5f);
+    dl->AddCircle(center, Grid::kStoneRadius * 0.78f,
+                  IM_COL32(180, 170, 145, 80), 32, 1.0f);
+  }
+}
+
+// Core drawing logic. interactive=true enables hover + click.
+// last_row/last_col mark the most recently placed stone (-1 to disable).
+std::pair<int, int> DrawBoardImpl(const Board& board, bool interactive,
+                                  int last_row, int last_col) {
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+  ImVec2 origin = ImGui::GetCursorScreenPos();
+
+  const float sz = Grid::kCanvasSize;
+
+  // ── Background ──────────────────────────────────────────────────────────
+  dl->AddRectFilled(origin, {origin.x + sz, origin.y + sz}, kBoardBg, 4.0f);
+
+  // ── Grid lines ──────────────────────────────────────────────────────────
+  for (int i = 0; i < Board::kSize; ++i) {
+    // Vertical line at column i.
+    ImVec2 a = IntersectionPos(origin, 0, i);
+    ImVec2 b = IntersectionPos(origin, Board::kSize - 1, i);
+    dl->AddLine(a, b, kLineColor, 1.0f);
+    // Horizontal line at row i.
+    ImVec2 c = IntersectionPos(origin, i, 0);
+    ImVec2 d = IntersectionPos(origin, i, Board::kSize - 1);
+    dl->AddLine(c, d, kLineColor, 1.0f);
+  }
+
+  // ── Star points ─────────────────────────────────────────────────────────
+  for (auto& sp : kStarPoints) {
+    ImVec2 center = IntersectionPos(origin, sp[0], sp[1]);
+    dl->AddCircleFilled(center, 4.0f, kStarColor, 12);
+  }
+
+  // ── Hover preview (before stones so it's behind) ────────────────────────
+  int hover_row = -1, hover_col = -1;
+  if (interactive && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows |
+                                            ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
+    ImVec2 mouse = ImGui::GetMousePos();
+    float rel_x = mouse.x - origin.x - Grid::kBoardPadding;
+    float rel_y = mouse.y - origin.y - Grid::kBoardPadding;
+    // Round to nearest intersection.
+    int col = static_cast<int>(rel_x / Grid::kCellSize + 0.5f);
+    int row = static_cast<int>(rel_y / Grid::kCellSize + 0.5f);
+    if (row >= 0 && row < Board::kSize && col >= 0 && col < Board::kSize) {
+      if (board.GetCell(row, col) == Cell::kEmpty) {
+        hover_row = row;
+        hover_col = col;
+        ImVec2 center = IntersectionPos(origin, row, col);
+        dl->AddCircleFilled(center, Grid::kStoneRadius,
+                            IM_COL32(80, 80, 80, 90), 40);
+      }
+    }
+  }
+
+  // ── Stones ──────────────────────────────────────────────────────────────
+  for (int r = 0; r < Board::kSize; ++r) {
+    for (int c = 0; c < Board::kSize; ++c) {
+      Cell cell = board.GetCell(r, c);
+      if (cell != Cell::kEmpty) {
+        ImVec2 center = IntersectionPos(origin, r, c);
+        DrawStone(dl, center, cell);
+      }
+    }
+  }
+
+  // ── Last-move indicator ──────────────────────────────────────────────────
+  if (last_row >= 0 && last_col >= 0) {
+    ImVec2 center = IntersectionPos(origin, last_row, last_col);
+    dl->AddCircleFilled(center, 4.5f, kLastMoveDot, 12);
+  }
+
+  // ── Reserve layout space ────────────────────────────────────────────────
+  ImGui::Dummy({sz, sz});
+
+  // ── Click detection ─────────────────────────────────────────────────────
+  if (interactive && ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+    if (hover_row >= 0) {
+      return {hover_row, hover_col};
+    }
+  }
+
+  return {-1, -1};
 }
 
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// Board rendering
+// Public API
 // ---------------------------------------------------------------------------
 
-char Grid::PlayerChar(Player p) { return (p == Player::kBlack) ? 'X' : 'O'; }
-
-void Grid::DrawBoard(const Board& board) const {
-  // Column header: A through O.
-  std::cout << "    ";
-  for (int c = 0; c < Board::kSize; ++c) {
-    std::cout << static_cast<char>('A' + c);
-    if (c < Board::kSize - 1) std::cout << ' ';
-  }
-  std::cout << "\n";
-
-  for (int r = 0; r < Board::kSize; ++r) {
-    // Row number right-aligned in 2 characters.
-    std::cout << (r + 1 < 10 ? " " : "") << (r + 1) << "  ";
-    for (int c = 0; c < Board::kSize; ++c) {
-      Cell cell = board.GetCell(r, c);
-      if (cell == Cell::kEmpty) {
-        std::cout << '.';
-      } else if (cell == Cell::kBlack) {
-        std::cout << 'X';
-      } else {
-        std::cout << 'O';
-      }
-      if (c < Board::kSize - 1) std::cout << ' ';
-    }
-    std::cout << "\n";
-  }
+std::pair<int, int> Grid::DrawBoard(const Board& board,
+                                    int last_row, int last_col) {
+  return DrawBoardImpl(board, /*interactive=*/true, last_row, last_col);
 }
 
-void Grid::DrawInfoBar(const InfoPanel& panel) const {
-  PrintSeparator();
-  std::cout << "Move " << panel.move_number() << " | ";
-  if (panel.current_player() == Player::kBlack) {
-    std::cout << "Black (X) to play";
-  } else {
-    std::cout << "White (O) to play";
-  }
-  if (panel.time_enabled()) {
-    std::cout << " | Time: " << panel.seconds_remaining() << "s";
-  }
-  std::cout << "\n";
-}
-
-// ---------------------------------------------------------------------------
-// Public render methods
-// ---------------------------------------------------------------------------
-
-void Grid::Render(const Board& board, const InfoPanel& panel) const {
-  ClearScreen();
-  DrawBoard(board);
-  DrawInfoBar(panel);
-}
-
-void Grid::RenderWin(std::optional<Player> winner) const {
-  PrintSeparator();
-  if (!winner.has_value()) {
-    std::cout << "  ** DRAW — the board is full! **\n";
-  } else if (*winner == Player::kBlack) {
-    std::cout << "  ** BLACK (X) WINS! **\n";
-  } else {
-    std::cout << "  ** WHITE (O) WINS! **\n";
-  }
-  PrintSeparator();
-}
-
-void Grid::RenderMainMenu() const {
-  ClearScreen();
-  PrintSeparator();
-  std::cout << "  GOMOKU\n";
-  PrintSeparator();
-  std::cout << "  1. Single Player vs AI  (not implemented)\n";
-  std::cout << "  2. Local Two Player\n";
-  std::cout << "  3. Network Multiplayer  (not implemented)\n";
-  std::cout << "  4. Replay\n";
-  std::cout << "  5. Settings\n";
-  std::cout << "  0. Quit\n";
-  PrintSeparator();
-  std::cout << "Select: ";
-}
-
-void Grid::RenderSettings(const Configuration& config) const {
-  ClearScreen();
-  PrintSeparator();
-  std::cout << "  SETTINGS\n";
-  PrintSeparator();
-  std::cout << "  1. Undo feature       : "
-            << (config.undo_enabled() ? "ON " : "OFF") << "\n";
-  std::cout << "  2. Move time limit    : "
-            << (config.time_limit_enabled() ? "ON " : "OFF") << "\n";
-  if (config.time_limit_enabled()) {
-    std::cout << "  3. Time limit (sec)   : " << config.time_limit_seconds()
-              << "\n";
-  }
-  std::cout << "  0. Back\n";
-  PrintSeparator();
-  std::cout << "Select: ";
-}
-
-void Grid::RenderReplayFrame(const Board& board, int step, int total,
-                             const GameMetadata& meta) const {
-  ClearScreen();
-  DrawBoard(board);
-  PrintSeparator();
-  std::cout << "Replay  [" << step << "/" << total << "]";
-  if (step > 0) {
-    // Show whose turn led to this board state.
-    // The last move placed was by the player who moved at step.
-  }
-  std::cout << "\n";
-
-  // Show metadata summary.
-  std::cout << "Date: " << meta.date << "  |  Moves: " << meta.total_moves;
-  if (meta.winner.has_value()) {
-    std::cout << "  |  Winner: "
-              << (*meta.winner == Player::kBlack ? "Black (X)" : "White (O)");
-  } else {
-    std::cout << "  |  Draw";
-  }
-  std::cout << "\n";
-  PrintSeparator();
-  std::cout << "n = next  |  p = previous  |  q = quit\n";
+void Grid::DrawBoardReadOnly(const Board& board, int last_row, int last_col) {
+  DrawBoardImpl(board, /*interactive=*/false, last_row, last_col);
 }
