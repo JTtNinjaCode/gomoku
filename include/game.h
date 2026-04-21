@@ -47,6 +47,8 @@ class Game {
   // Returns fractional seconds remaining this turn, or -1.0f if disabled.
   float seconds_remaining() const;
 
+  const GameRecord& record() const { return record_; }
+
  private:
   const Configuration& config_;
   Board board_;

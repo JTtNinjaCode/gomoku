@@ -1,9 +1,12 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 
+#include "ai_player.h"
 #include "configuration.h"
 #include "game.h"
 #include "game_record.h"
@@ -73,4 +76,12 @@ class App {
   bool settings_undo_enabled_ = false;
   bool settings_time_enabled_ = false;
   int  settings_time_seconds_ = 60;
+
+  // ── AI game fields ──────────────────────────────────────────────────────────
+  bool                      is_ai_game_      = false;
+  Player                    ai_color_        = Player::kWhite;
+  std::unique_ptr<AIPlayer> ai_player_;
+  std::thread               ai_thread_;
+  std::atomic<int>          ai_pending_move_{-1};
+  std::atomic<bool>         ai_thinking_{false};
 };

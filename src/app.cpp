@@ -10,6 +10,7 @@
 #include "file_manager.h"
 #include "grid.h"
 #include "imgui.h"
+#include "mcts_state.h"
 
 #define GL_SILENCE_DEPRECATION
 #include <GLFW/glfw3.h>
@@ -84,6 +85,7 @@ bool App::Init() {
 }
 
 void App::Shutdown() {
+  if (ai_thread_.joinable()) ai_thread_.join();
   if (!window_) return;
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
@@ -132,17 +134,28 @@ void App::RenderFrame() {
   ImGui::SetNextWindowPos({0, 0});
   ImGui::SetNextWindowSize(io.DisplaySize);
   ImGui::SetNextWindowBgAlpha(0.0f);
-  ImGuiWindowFlags flags =
-      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-      ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBringToFrontOnFocus;
+  ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
+                           ImGuiWindowFlags_NoMove |
+                           ImGuiWindowFlags_NoScrollWithMouse |
+                           ImGuiWindowFlags_NoBringToFrontOnFocus;
   ImGui::Begin("##root", nullptr, flags);
 
   switch (state_) {
-    case AppState::kMainMenu:  DrawMainMenu();  break;
-    case AppState::kPlaying:   DrawGame();      break;
-    case AppState::kGameOver:  DrawGameOver();  break;
-    case AppState::kReplay:    DrawReplay();    break;
-    case AppState::kSettings:  DrawSettings();  break;
+    case AppState::kMainMenu:
+      DrawMainMenu();
+      break;
+    case AppState::kPlaying:
+      DrawGame();
+      break;
+    case AppState::kGameOver:
+      DrawGameOver();
+      break;
+    case AppState::kReplay:
+      DrawReplay();
+      break;
+    case AppState::kSettings:
+      DrawSettings();
+      break;
   }
 
   ImGui::End();
@@ -154,12 +167,11 @@ void App::RenderFrame() {
 
 void App::DrawMainMenu() {
   const float panel_w = 340.0f;
-  const float panel_h = 300.0f;
+  const float panel_h = 330.0f;
   ImGuiIO& io = ImGui::GetIO();
-  ImGui::SetNextWindowPos(
-      {(io.DisplaySize.x - panel_w) * 0.5f,
-       (io.DisplaySize.y - panel_h) * 0.5f},
-      ImGuiCond_Always);
+  ImGui::SetNextWindowPos({(io.DisplaySize.x - panel_w) * 0.5f,
+                           (io.DisplaySize.y - panel_h) * 0.5f},
+                          ImGuiCond_Always);
   ImGui::SetNextWindowSize({panel_w, panel_h});
   ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
                            ImGuiWindowFlags_NoMove |
@@ -182,6 +194,23 @@ void App::DrawMainMenu() {
   };
 
   if (centred_btn("Local Two Player")) {
+    is_ai_game_ = false;
+    ai_player_.reset();
+    game_ = std::make_unique<Game>(config_);
+    game_->Start();
+    last_row_ = last_col_ = -1;
+    finished_record_.reset();
+    save_attempted_ = false;
+    save_status_msg_.clear();
+    state_ = AppState::kPlaying;
+  }
+  ImGui::Spacing();
+  if (centred_btn("Player vs AI")) {
+    is_ai_game_ = true;
+    ai_color_ = Player::kWhite;
+    ai_player_ = std::make_unique<AIPlayer>("model/alpha-zero.pt");
+    ai_pending_move_.store(-1);
+    ai_thinking_.store(false);
     game_ = std::make_unique<Game>(config_);
     game_->Start();
     last_row_ = last_col_ = -1;
@@ -219,10 +248,14 @@ void App::DrawGame() {
   // Update timer every frame — may auto-transition to kTimeout.
   game_->Update();
   if (game_->state() != Game::State::kPlaying) {
+    if (ai_thread_.joinable()) ai_thread_.join();
+    ai_thinking_.store(false);
     finished_record_ = game_->FinalizeRecord();
     state_ = AppState::kGameOver;
     return;
   }
+
+  const bool ai_turn = is_ai_game_ && game_->current_player() == ai_color_;
 
   // ── Info bar ──────────────────────────────────────────────────────────
   const char* player_name =
@@ -234,17 +267,60 @@ void App::DrawGame() {
   if (config_.time_limit_enabled()) {
     float secs = game_->seconds_remaining();
     ImGui::SameLine();
-    // Colour the timer red when under 10 s.
     if (secs <= 10.0f)
       ImGui::TextColored({1.0f, 0.25f, 0.25f, 1.0f}, "  |  Time: %.1fs", secs);
     else
       ImGui::Text("  |  Time: %.1fs", secs);
   }
 
+  if (ai_turn && ai_thinking_.load()) {
+    ImGui::SameLine();
+    ImGui::TextColored({0.4f, 0.8f, 1.0f, 1.0f}, "  |  AI is thinking...");
+  }
+
   ImGui::Spacing();
 
-  // ── Board ──────────────────────────────────────────────────────────────
-  // Centre the board horizontally.
+  // ── Launch AI thread on AI's turn ──────────────────────────────────────
+  if (ai_turn && !ai_thinking_.load()) {
+    ai_thinking_.store(true);
+    ai_pending_move_.store(-1);
+    MCTSState state = MCTSState::FromGame(
+        game_->board(), game_->current_player(), game_->record());
+    ai_thread_ = std::thread([this, state]() {
+      int move = ai_player_->PickMove(state);
+      ai_pending_move_.store(move, std::memory_order_release);
+    });
+  }
+
+  // ── Consume AI move when ready ─────────────────────────────────────────
+  if (ai_turn && ai_thinking_.load()) {
+    int pending = ai_pending_move_.load(std::memory_order_acquire);
+    if (pending >= 0) {
+      if (ai_thread_.joinable()) ai_thread_.join();
+      ai_thinking_.store(false);
+      ai_pending_move_.store(-1);
+      int row = pending / Board::kSize;
+      int col = pending % Board::kSize;
+      if (game_->TryPlaceStone(row, col)) {
+        last_row_ = row;
+        last_col_ = col;
+        if (game_->state() != Game::State::kPlaying) {
+          finished_record_ = game_->FinalizeRecord();
+          state_ = AppState::kGameOver;
+          return;
+        }
+      }
+    }
+    // While AI is thinking (or just placed its stone this frame):
+    // draw board read-only, skip human input and buttons.
+    float avail_x = ImGui::GetContentRegionAvail().x;
+    float offset_x = (avail_x - Grid::kCanvasSize) * 0.5f;
+    if (offset_x > 0) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset_x);
+    Grid::DrawBoardReadOnly(game_->board(), last_row_, last_col_);
+    return;
+  }
+
+  // ── Board (human turn) ─────────────────────────────────────────────────
   float avail_x = ImGui::GetContentRegionAvail().x;
   float offset_x = (avail_x - Grid::kCanvasSize) * 0.5f;
   if (offset_x > 0) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset_x);
@@ -256,7 +332,8 @@ void App::DrawGame() {
     if (game_->TryPlaceStone(clicked_row, clicked_col)) {
       last_row_ = clicked_row;
       last_col_ = clicked_col;
-      // Check again: the move may have ended the game.
+      if (is_ai_game_)
+        ai_player_->NotifyMove(clicked_row * Board::kSize + clicked_col);
       if (game_->state() != Game::State::kPlaying) {
         finished_record_ = game_->FinalizeRecord();
         state_ = AppState::kGameOver;
@@ -267,26 +344,21 @@ void App::DrawGame() {
 
   ImGui::Spacing();
 
-  // ── Buttons ────────────────────────────────────────────────────────────
-  if (config_.undo_enabled()) {
-    if (ImGui::Button("Undo", {100, 32})) {
-      game_->Undo();
-      // After undo, re-derive the last move from the record.
-      const auto& moves = game_->board();
-      (void)moves;
-      if (!game_->board().IsFull()) {
-        // Re-read last move from the internal record is not exposed, so
-        // we just clear the indicator on undo.
+  // ── Buttons (hidden during AI turn) ───────────────────────────────────
+  if (!ai_turn) {
+    if (config_.undo_enabled()) {
+      if (ImGui::Button("Undo", {100, 32})) {
+        game_->Undo();
+        if (is_ai_game_) ai_player_->Reset();
         last_row_ = last_col_ = -1;
       }
+      ImGui::SameLine();
     }
-    ImGui::SameLine();
-  }
-  if (ImGui::Button("Forfeit", {100, 32})) {
-    // Current player forfeits; opponent wins.
-    // Force a timeout to trigger the same game-over path.
-    finished_record_ = game_->FinalizeRecord();
-    state_ = AppState::kGameOver;
+    if (ImGui::Button("Forfeit", {100, 32})) {
+      if (ai_thread_.joinable()) ai_thread_.join();
+      finished_record_ = game_->FinalizeRecord();
+      state_ = AppState::kGameOver;
+    }
   }
 }
 
@@ -300,8 +372,7 @@ void App::DrawGameOver() {
 
   // Result banner.
   if (game_->winner().has_value()) {
-    const char* name =
-        (*game_->winner() == Player::kBlack) ? "Black" : "White";
+    const char* name = (*game_->winner() == Player::kBlack) ? "Black" : "White";
     if (game_->state() == Game::State::kTimeout)
       ImGui::Text("%s wins by timeout!", name);
     else
@@ -373,6 +444,10 @@ void App::DrawGameOver() {
   ImGui::Spacing();
 
   if (ImGui::Button("New Game", {130, 34})) {
+    if (ai_thread_.joinable()) ai_thread_.join();
+    ai_thinking_.store(false);
+    ai_pending_move_.store(-1);
+    if (is_ai_game_) ai_player_->Reset();
     game_->Start();
     last_row_ = last_col_ = -1;
     finished_record_.reset();
@@ -382,6 +457,11 @@ void App::DrawGameOver() {
   }
   ImGui::SameLine();
   if (ImGui::Button("Main Menu", {130, 34})) {
+    if (ai_thread_.joinable()) ai_thread_.join();
+    ai_thinking_.store(false);
+    ai_pending_move_.store(-1);
+    is_ai_game_ = false;
+    ai_player_.reset();
     game_.reset();
     finished_record_.reset();
     state_ = AppState::kMainMenu;
@@ -420,15 +500,13 @@ void App::DrawReplay() {
   if (replay_.total_moves() > 0) {
     ImGui::Spacing();
     // Navigation controls.
-    bool prev =
-        ImGui::Button("< Prev", {90, 30}) ||
-        ImGui::IsKeyPressed(ImGuiKey_LeftArrow) ||
-        ImGui::IsKeyPressed(ImGuiKey_P);
+    bool prev = ImGui::Button("< Prev", {90, 30}) ||
+                ImGui::IsKeyPressed(ImGuiKey_LeftArrow) ||
+                ImGui::IsKeyPressed(ImGuiKey_P);
     ImGui::SameLine();
-    bool next =
-        ImGui::Button("Next >", {90, 30}) ||
-        ImGui::IsKeyPressed(ImGuiKey_RightArrow) ||
-        ImGui::IsKeyPressed(ImGuiKey_N);
+    bool next = ImGui::Button("Next >", {90, 30}) ||
+                ImGui::IsKeyPressed(ImGuiKey_RightArrow) ||
+                ImGui::IsKeyPressed(ImGuiKey_N);
     ImGui::SameLine();
     ImGui::Text("Step %d / %d", replay_cursor_, replay_.total_moves());
 
