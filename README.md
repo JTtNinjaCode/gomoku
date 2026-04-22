@@ -41,14 +41,15 @@ git clone --recurse-submodules git@github.com:JTtNinjaCode/gomoku.git
 cd gomoku
 
 # 2. Configure
-cmake -B build
+cmake -B build            # GPU build (CUDA, default)
+cmake -B build -DUSE_GPU=OFF   # CPU-only build
 
 # 3. Compile
-cmake --build build -j$(nproc)   # Linux / macOS
-cmake --build build              # Windows
+cmake --build build -j$(nproc)            # Linux / macOS
+cmake --build build --config Release      # Windows
 ```
 
-The binary is placed at `build/gomoku` (or `build\gomoku.exe` on Windows).
+The binary is placed at `build/gomoku` (or `build\Release\gomoku.exe` on Windows).
 
 > **Already cloned without `--recurse-submodules`?**
 > ```bash

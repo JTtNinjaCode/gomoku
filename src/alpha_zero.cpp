@@ -8,7 +8,7 @@ AlphaZero::AlphaZero(const std::string& model_path, bool use_gpu)
     device_ = torch::Device(torch::kCUDA);
 
   try {
-    module_ = torch::jit::load(model_path);
+    module_ = torch::jit::load(model_path, device_);
   } catch (const c10::Error& e) {
     throw std::runtime_error("Failed to load AlphaZero model: " +
                              std::string(e.what()));
