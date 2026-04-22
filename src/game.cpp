@@ -49,10 +49,8 @@ void Game::Update() {
 float Game::seconds_remaining() const {
   if (!config_.time_limit_enabled()) return -1.0f;
   using namespace std::chrono;
-  float elapsed =
-      duration<float>(steady_clock::now() - turn_start_).count();
-  float remaining =
-      static_cast<float>(config_.time_limit_seconds()) - elapsed;
+  float elapsed = duration<float>(steady_clock::now() - turn_start_).count();
+  float remaining = static_cast<float>(config_.time_limit_seconds()) - elapsed;
   return remaining > 0.0f ? remaining : 0.0f;
 }
 
@@ -76,8 +74,8 @@ bool Game::TryPlaceStone(int row, int col) {
     return true;
   }
 
-  current_player_ = (current_player_ == Player::kBlack) ? Player::kWhite
-                                                         : Player::kBlack;
+  current_player_ =
+      (current_player_ == Player::kBlack) ? Player::kWhite : Player::kBlack;
   ++move_number_;
   turn_start_ = std::chrono::steady_clock::now();
   return true;
@@ -112,10 +110,9 @@ GameRecord Game::FinalizeRecord() {
       duration_cast<seconds>(steady_clock::now() - game_start_).count());
 
   std::time_t t = std::time(nullptr);
-  std::tm tm_buf;
-  localtime_r(&t, &tm_buf);
+  std::tm* tm_buf = std::localtime(&t);
   std::ostringstream date_ss;
-  date_ss << std::put_time(&tm_buf, "%Y-%m-%d");
+  date_ss << std::put_time(tm_buf, "%Y-%m-%d");
 
   GameMetadata meta;
   meta.date = date_ss.str();

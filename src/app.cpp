@@ -399,10 +399,9 @@ void App::DrawGameOver() {
       save_attempted_ = true;
       // Build default path.
       std::time_t t = std::time(nullptr);
-      std::tm tm_buf;
-      localtime_r(&t, &tm_buf);
+      std::tm* tm_buf = std::localtime(&t);
       std::ostringstream ss;
-      ss << "saves/" << std::put_time(&tm_buf, "%Y%m%d_%H%M%S") << ".gom";
+      ss << "saves/" << std::put_time(tm_buf, "%Y%m%d_%H%M%S") << ".gom";
       std::string default_path = ss.str();
       std::snprintf(save_path_buf_, sizeof(save_path_buf_), "%s",
                     default_path.c_str());
